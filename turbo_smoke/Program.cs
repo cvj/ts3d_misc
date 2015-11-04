@@ -45,7 +45,7 @@ namespace turbo_smoke
             if (!RunCommandLineProcess(smoke_path, string.Format("-d {0} -n -l", driver), out tests_string, out error))
                 throw new Exception();
 
-            var tests = tests_string.Split(new string[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries).ToList();
+            var tests = tests_string.Split(new string[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries).Take(10);
 
             string output_dir = Path.Combine(smoke_data_dir, DateTime.Now.ToString("MM.dd.yyyy.hh.mm.ss"));
             Directory.CreateDirectory(output_dir);
@@ -74,26 +74,72 @@ namespace turbo_smoke
             Stopwatch timer = new Stopwatch();
             timer.Start();
 
-            var start = timer.Elapsed;
-            
-            Parallel.ForEach(tests, one_test);
-            //tests.ForEach(one_test);
-
-            var finish = timer.Elapsed;
-
-            Console.WriteLine("Test run time = " + (finish - start).TotalSeconds);
-
-            string captures_dir = Path.Combine(output_dir, "captures");
-            Directory.CreateDirectory(captures_dir);
-            foreach (string test in tests)
             {
-                string test_dir = Path.Combine(output_dir, test);
-                var images = Directory.GetFiles(test_dir, "*.png");
+                var start = timer.Elapsed;
 
-                foreach (string image in images)
+                Parallel.ForEach(tests, one_test);
+                //tests.ForEach(one_test);
+
+                var finish = timer.Elapsed;
+
+                Console.WriteLine("Test run time = " + (finish - start).TotalSeconds);
+            }
+
+            {
+                var start = timer.Elapsed;
+
+                string captures_dir = Path.Combine(output_dir, "captures");
+                Directory.CreateDirectory(captures_dir);
+                StreamWriter writer = null;
+                string merged_dat = null;
+                foreach (string test in tests)
                 {
-                    File.Copy(image, Path.Combine(captures_dir, Path.GetFileName(image)));
+                    string test_dir = Path.Combine(output_dir, test);
+                    var images = Directory.GetFiles(test_dir, "*.png");
+
+                    foreach (string image in images)
+                    {
+                        File.Copy(image, Path.Combine(captures_dir, Path.GetFileName(image)));
+                    }
+
+                    var dat_file = Directory.GetFiles(test_dir, "*.dat")[0];
+
+                    if (writer == null)
+                    {
+                        merged_dat = Path.Combine(captures_dir, Path.GetFileName(dat_file));
+                        File.Copy(dat_file, merged_dat);
+                        writer = new StreamWriter(new FileStream(merged_dat, FileMode.Append));
+
+                    }
+
+                    else
+                    {
+                        string one_dat = File.ReadAllText(dat_file);
+
+                        using (StringReader dat_reader = new StringReader(one_dat))
+                        {
+                            dat_reader.ReadLine();
+                            dat_reader.ReadLine();
+                            dat_reader.ReadLine();
+                            dat_reader.ReadLine();
+                            dat_reader.ReadLine();
+                            dat_reader.ReadLine();
+                            dat_reader.ReadLine();
+
+                            var the_rest = dat_reader.ReadToEnd();
+
+                            writer.Write(the_rest);
+                        }
+                    }
                 }
+
+                writer.Close();
+
+                var finish = timer.Elapsed;
+
+                Console.WriteLine("Merge time = " + (finish - start).TotalSeconds);
+
+                RunCommandLineProcess(smoke_path, string.Format("-d {0} -c -x * -D {1} -n", driver, captures_dir), out tests_string, out error);
             }
 
             Console.Read();
