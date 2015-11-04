@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Diagnostics;
 using System.IO;
+using System.Threading;
 
 namespace turbo_smoke
 {
@@ -16,8 +17,7 @@ namespace turbo_smoke
 
             ps.Arguments = args;
             ps.UseShellExecute = false;
-            ps.CreateNoWindow = true;
-            //ps.WorkingDirectory = Project.TOOLS_BIN;
+            ps.CreateNoWindow = true;            
             ps.FileName = exe;
             ps.RedirectStandardError = true;
             ps.RedirectStandardOutput = true;
@@ -33,19 +33,41 @@ namespace turbo_smoke
             }            
         }
 
+        static Process RunCommandLineProcess(string exe, string args, EventHandler exited)
+        {
+            ProcessStartInfo ps = new ProcessStartInfo();
+
+            ps.Arguments = args;
+            ps.UseShellExecute = false;
+            ps.CreateNoWindow = true;            
+            ps.FileName = exe;
+            ps.RedirectStandardError = true;
+            ps.RedirectStandardOutput = true;
+
+            Process process = new Process();
+            process.StartInfo = ps;
+            process.Exited += exited;
+            process.EnableRaisingEvents = true;
+
+            process.Start();
+            return process;
+        }
+
         static void Main(string[] args)
         {
             string smoke_path = "d:\\git\\visualize\\hoops_3df\\bin\\nt_x64_vc12\\smoke.exe";            
             string smoke_data_dir = "C:\\users\\evan\\desktop\\smoke_data";
             string driver = "dx11";
-            string baseline_dir = "C:\\users\\evan\\desktop\\smoke_data\\baselines";
+            string baseline_dir = null;// "C:\\users\\evan\\desktop\\smoke_data\\baselines";
             Dictionary<string, int> baselines = null;
-
-            string error;
-            string tests_string;
+            
+            Stopwatch timer = new Stopwatch();
+            timer.Start();
 
             if (baseline_dir != null)
             {
+                var start = timer.Elapsed;
+
                 baselines = new Dictionary<string, int>();
 
                 var dat_file = Directory.GetFiles(baseline_dir, "*.dat")[0];
@@ -74,24 +96,35 @@ namespace turbo_smoke
                         }                        
                     }
                 }
+
+                var finish = timer.Elapsed;
+                Console.WriteLine("Load baselines time = " + (finish - start).TotalSeconds);
             }
 
-            if (!RunCommandLineProcess(smoke_path, string.Format("-d {0} -n -l", driver), out tests_string, out error))
-                throw new Exception();
+            string tests_string;
+            {
+                string error;                
+                if (!RunCommandLineProcess(smoke_path, string.Format("-d {0} -n -l", driver), out tests_string, out error))
+                    throw new Exception();
+            }
 
-            var tests = tests_string.Split(new string[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries).Take(10);
+            var tests = tests_string.Split(new string[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries).Take(200);
 
             string output_dir = Path.Combine(smoke_data_dir, DateTime.Now.ToString("MM.dd.yyyy.hh.mm.ss"));
             Directory.CreateDirectory(output_dir);
 
             List<string> failed_tests = new List<string>();
             object sync = new object();
+
+#if false
             Action<string> one_test = (string test) =>
             {
                 string test_dir = Path.Combine(output_dir, test);
                 Directory.CreateDirectory(test_dir);
 
-                if (RunCommandLineProcess(smoke_path, string.Format("-d {0} -k -D {1} -n -t {2}", driver, test_dir, test), out tests_string, out error))
+                string output;
+                string error;
+                if (RunCommandLineProcess(smoke_path, string.Format("-d {0} -k -D {1} -n -t {2}", driver, test_dir, test), out output, out error))
                 {
 
                 }
@@ -105,9 +138,6 @@ namespace turbo_smoke
                 }
             };
 
-            Stopwatch timer = new Stopwatch();
-            timer.Start();
-
             {
                 var start = timer.Elapsed;
 
@@ -115,10 +145,32 @@ namespace turbo_smoke
                 //tests.ForEach(one_test);
 
                 var finish = timer.Elapsed;
-
                 Console.WriteLine("Test run time = " + (finish - start).TotalSeconds);                                
             }
+#else
+            {
+                Semaphore s = new Semaphore(8, 8);
 
+                EventHandler exited = (object sender, EventArgs e) =>
+                {
+                    s.Release();
+                };
+
+                var start = timer.Elapsed;
+
+                foreach (var test in tests)
+                {
+                    string test_dir = Path.Combine(output_dir, test);
+                    Directory.CreateDirectory(test_dir);
+
+                    s.WaitOne();
+                    RunCommandLineProcess(smoke_path, string.Format("-d {0} -k -D {1} -n -t {2}", driver, test_dir, test), exited);
+                }
+
+                var finish = timer.Elapsed;
+                Console.WriteLine("Test run time = " + (finish - start).TotalSeconds);
+            }
+#endif
             {
                 var start = timer.Elapsed;
                 string captures_dir = null;
@@ -242,7 +294,9 @@ namespace turbo_smoke
 
                 Console.WriteLine("Merge time = " + (finish - start).TotalSeconds);
 
-                RunCommandLineProcess(smoke_path, string.Format("-d {0} -c -x * -D {1} -n", driver, captures_dir), out tests_string, out error);
+                string output;
+                string error;
+                RunCommandLineProcess(smoke_path, string.Format("-d {0} -c -x * -D {1} -n", driver, captures_dir), out output, out error);
             }            
         }
     }
