@@ -280,8 +280,8 @@ namespace turbo_smoke
                     throw new Exception();
             }
 
-            var tests = tests_string.Split(new string[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries).Take(100).ToList();
-            tests.Add("10736_gpu_resident_timed");
+            var tests = tests_string.Split(new string[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);//.Take(100).ToList();
+            //tests.Add("10736_gpu_resident_timed");
         
             string output_dir = settings.OutputDir;
             if (Directory.Exists(output_dir))
@@ -326,16 +326,48 @@ namespace turbo_smoke
             }
 #else
             {
-                const int in_flight_tests = 12;
+                int in_flight_tests = Environment.ProcessorCount * 3 / 2;
 
                 Semaphore s = new Semaphore(in_flight_tests, in_flight_tests);
+                List<Process> processes = new List<Process>();
+                ManualResetEvent finished = new ManualResetEvent(false);
+
+                Action<object> monitorThread = (object o) =>
+                    {
+                        var timeout = TimeSpan.FromSeconds(15.0);
+
+                        while (!finished.WaitOne(1000))
+                        {
+                            var now = DateTime.Now;
+
+                            lock (sync)
+                            {
+                                // Kill below will synchronously call exit handler and modify collection
+                                for (int i = processes.Count - 1; i >= 0; --i)
+                                {
+                                    var process = processes[i];
+
+                                    if (now - process.StartTime > timeout)
+                                    {
+                                        if (!process.HasExited)
+                                            process.Kill();
+                                    }
+                                }
+                            }
+                        }
+                    };
 
                 EventHandler exited = (object sender, EventArgs e) =>
                 {
                     var process = (Process)sender;
 
+                    lock (sync)
+                    {
+                        processes.Remove(process);
+                    }
+
                     string a = process.StartInfo.Arguments;
-                    string test_name = a.Substring(a.IndexOf("-t") + 2);
+                    string test_name = a.Substring(a.IndexOf("-t") + 3);
 
                     if (process.ExitCode == 0)
                     {
@@ -344,7 +376,15 @@ namespace turbo_smoke
 
                     else
                     {
-                        Console.WriteLine("Crashed: " + test_name);
+                        if ((uint)process.ExitCode == 0xFFFFFFFF)
+                        {
+                            Console.WriteLine("Killed: " + test_name);
+                        }                        
+
+                        else
+                        {
+                            Console.WriteLine("Crashed: " + test_name);
+                        }
 
                         lock (sync)
                         {
@@ -357,17 +397,28 @@ namespace turbo_smoke
 
                 var start = timer.Elapsed;
 
+                ThreadPool.QueueUserWorkItem(new WaitCallback(monitorThread));
+
                 foreach (var test in tests)
                 {
                     string test_dir = Path.Combine(output_dir, test);
                     Directory.CreateDirectory(test_dir);
 
                     s.WaitOne();
-                    RunCommandLineProcess(settings.SmokeExecutable, string.Format("-d {0} -k -D {1} -n -t {2}", settings.Driver, test_dir, test), exited);
+                    var process = RunCommandLineProcess(settings.SmokeExecutable, string.Format("-d {0} -k -D {1} -n -t {2}", settings.Driver, test_dir, test), exited);
+
+                    lock(sync)
+                    {
+                        processes.Add(process);                        
+                    }
                 }
 
                 for (int i = 0; i < in_flight_tests; ++i)
                     s.WaitOne();
+
+                Debug.Assert(processes.Count == 0);
+
+                finished.Set();
 
                 var finish = timer.Elapsed;
                 Console.WriteLine("Test run time = " + (finish - start).TotalSeconds);
