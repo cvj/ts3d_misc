@@ -106,7 +106,7 @@ namespace turbo_smoke
 
                                 if (!File.Exists(settings.SmokeExecutable))
                                 {
-                                    Console.WriteLine(string.Format("Smoke executable '[0}' does not exist.", settings.SmokeExecutable));
+                                    Console.WriteLine("Smoke executable '{0}' does not exist.", settings.SmokeExecutable);
                                     return false;
                                 }
                             }
@@ -127,7 +127,7 @@ namespace turbo_smoke
 
                                 if (Directory.Exists(settings.OutputDir))
                                 {
-                                    Console.WriteLine(string.Format("Output directory '{0}' exists, use -O instead to overwrite existing directory.", settings.OutputDir));
+                                    Console.WriteLine("Output directory '{0}' exists, use -O instead to overwrite existing directory.", settings.OutputDir);
                                     return false;
                                 }
                             }
@@ -163,7 +163,7 @@ namespace turbo_smoke
 
                                 if (!Directory.Exists(settings.BaselineDir))
                                 {
-                                    Console.WriteLine(string.Format("Baselines directory '{0}' does not exist.", settings.BaselineDir));
+                                    Console.WriteLine("Baselines directory '{0}' does not exist.", settings.BaselineDir);
                                     return false;
                                 }
                             }
@@ -220,6 +220,7 @@ namespace turbo_smoke
             if (args.Length == 0)
             {
                 ShowHelp();
+                Console.ReadKey();
                 Environment.Exit(0);
             }
 
@@ -227,6 +228,7 @@ namespace turbo_smoke
             if (!ProcessArgs(args, out settings))
             {
                 Console.WriteLine("One or more invalid arguments specified, exiting.");
+                Console.ReadKey();
                 Environment.Exit(1);
             }
 
@@ -270,7 +272,7 @@ namespace turbo_smoke
                 }
 
                 var finish = timer.Elapsed;
-                Console.WriteLine("Load baselines time = " + (finish - start).TotalSeconds);
+                Console.WriteLine("Load baselines time = {0:F2} sec.", (finish - start).TotalSeconds);
             }
 
             string tests_string;
@@ -280,7 +282,7 @@ namespace turbo_smoke
                     throw new Exception();
             }
 
-            var tests = tests_string.Split(new string[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);//.Take(100).ToList();
+            var tests = tests_string.Split(new string[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries).Take(100).ToList();
             //tests.Add("10736_gpu_resident_timed");
         
             string output_dir = settings.OutputDir;
@@ -421,7 +423,7 @@ namespace turbo_smoke
                 finished.Set();
 
                 var finish = timer.Elapsed;
-                Console.WriteLine("Test run time = " + (finish - start).TotalSeconds);
+                Console.WriteLine("Test run time = {0:F2} sec.", (finish - start).TotalSeconds);
             }
 #endif
             {
@@ -545,7 +547,7 @@ namespace turbo_smoke
 
                                         else
                                         {
-                                            Console.WriteLine(string.Format("No baseline found for '{0}'.", test));
+                                            Console.WriteLine("No baseline found for '{0}'.", test);
 
                                             changed_tests.Add(test);
                                             writer.Write(result);
@@ -572,7 +574,7 @@ namespace turbo_smoke
 
                 var finish = timer.Elapsed;
 
-                Console.WriteLine("Merge time = " + (finish - start).TotalSeconds);
+                Console.WriteLine("Merge time = {0:F2} sec.", (finish - start).TotalSeconds);
 
                 if (captures_dir != null)
                 {
