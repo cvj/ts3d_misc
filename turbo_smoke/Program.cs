@@ -525,20 +525,35 @@ namespace turbo_smoke
                                         line = line.Substring(7);
                                         int crc = int.Parse(line, System.Globalization.NumberStyles.AllowHexSpecifier);
 
-                                        if (crc != baselines[test])
+                                        int baseline_crc;
+                                        if (baselines.TryGetValue(test, out baseline_crc))
                                         {
+                                            if (baseline_crc != crc)
+                                            {
+                                                changed_tests.Add(test);
+                                                writer.Write(result);
+
+                                                var images = Directory.GetFiles(test_dir, "*.png");
+                                                if (images.Length > 0)
+                                                    File.Copy(images[0], Path.Combine(captures_dir, Path.GetFileName(images[0])));
+
+                                                var match = "*" + test + ".png";
+                                                var baseline_image = Directory.GetFiles(settings.BaselineDir, match)[0];
+                                                File.Copy(baseline_image, Path.Combine(captures_dir, Path.GetFileName(baseline_image)));
+                                            }
+                                        }
+
+                                        else
+                                        {
+                                            Console.WriteLine(string.Format("No baseline found for '{0}'.", test));
+
                                             changed_tests.Add(test);
                                             writer.Write(result);
 
                                             var images = Directory.GetFiles(test_dir, "*.png");
                                             if (images.Length > 0)
                                                 File.Copy(images[0], Path.Combine(captures_dir, Path.GetFileName(images[0])));
-
-                                            var match = "*" + test + ".png";
-                                            var baseline_image = Directory.GetFiles(settings.BaselineDir, match)[0];
-                                            File.Copy(baseline_image, Path.Combine(captures_dir, Path.GetFileName(baseline_image)));
                                         }
-
                                     }
                                 }
                             }
