@@ -40,11 +40,11 @@ namespace turbo_smoke
 
             ps.Arguments = args;
             ps.UseShellExecute = false;
-            //ps.CreateNoWindow = true;
+            ps.CreateNoWindow = true;
             ps.FileName = exe;
             //ps.RedirectStandardError = true;
             //ps.RedirectStandardOutput = true;
-            //ps.WindowStyle = ProcessWindowStyle.Hidden;            
+            ps.WindowStyle = ProcessWindowStyle.Hidden;
 
             Process process = new Process();
             process.StartInfo = ps;
@@ -77,6 +77,7 @@ namespace turbo_smoke
             public string OutputDir;
             public string BaselineDir;
             public string Driver;
+            public string ExcludeList;
         }
 
         static void ShowHelp()
@@ -87,6 +88,7 @@ namespace turbo_smoke
             Console.WriteLine("-o output directory path, must not already exist.");
             Console.WriteLine("-O output directory path to be overwritten.");
             Console.WriteLine("-d driver type.");
+            Console.WriteLine("-X path to file containing tests to exclude.");
         }
         static bool ProcessArgs(string[] args, out Settings settings)
         {
@@ -178,11 +180,31 @@ namespace turbo_smoke
 
                     case "-d":
                         {
-                            if (i + 1 < args.Length)                            
-                                settings.Driver = args[++i];                            
+                            if (i + 1 < args.Length)
+                            {
+                                settings.Driver = args[++i];
+                            }
 
-                            else                            
-                                Console.WriteLine("No driver specified with -d option.");                            
+                            else
+                            {
+                                Console.WriteLine("No driver specified with -d option.");
+                                return false;
+                            }
+                        }
+                        break;
+
+                    case "-X":
+                        {
+                            if (i + 1 < args.Length)
+                            {
+                                settings.ExcludeList = args[++i];
+                            }
+
+                            else
+                            {
+                                Console.WriteLine("No exclude list file specified with -X option.");
+                                return false;
+                            }
                         }
                         break;
                 }
@@ -283,20 +305,35 @@ namespace turbo_smoke
                     throw new Exception();
             }
 
-            var tests = tests_string.Split(new string[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);//.Skip(100).Take(100).ToList();
-            //tests.Add("10736_gpu_resident_timed");
+            var tests = tests_string.Split(new string[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries).AsEnumerable();
+
+            if (settings.ExcludeList != null)
+            {
+                List<string> exclude = new List<string>();
+                using (var reader = File.OpenText(settings.ExcludeList))
+                {
+                    while (!reader.EndOfStream)
+                    {
+                        var line = reader.ReadLine();
+                        var test = line.Split(' ')[0];
+                        exclude.Add(test);
+                    }
+                }
+
+                tests = tests.Except(exclude);
+            }
 
             NativeMethods.SetErrorMode(NativeMethods.SetErrorMode(0) | ErrorModes.SEM_NOGPFAULTERRORBOX | ErrorModes.SEM_FAILCRITICALERRORS | ErrorModes.SEM_NOOPENFILEERRORBOX);
-            
+                        
             List<string> failed_tests = new List<string>();
 
             {
                 int in_flight_tests = 3 * Environment.ProcessorCount / 2;
 
-                if (Environment.ProcessorCount <= 4 || string.Compare(settings.Driver, "opengl2", StringComparison.InvariantCultureIgnoreCase) == 0)
+                if (Environment.ProcessorCount <= 4 || settings.Driver.Contains("opengl"))
                     in_flight_tests = 4;
                 
-                const bool record_test_times = false;
+                const bool record_test_times = true;
                 Dictionary<string, TimeSpan> test_times = null;
                 if (record_test_times)
                     test_times = new Dictionary<string, TimeSpan>();
@@ -308,7 +345,7 @@ namespace turbo_smoke
 
                 Action<object> monitorThread = (object o) =>
                     {
-                        var timeout = TimeSpan.FromSeconds(15);
+                        var timeout = TimeSpan.FromSeconds(100);
 
                         while (!finished.WaitOne(1000))
                         {
