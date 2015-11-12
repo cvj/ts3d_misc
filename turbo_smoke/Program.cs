@@ -178,15 +178,11 @@ namespace turbo_smoke
 
                     case "-d":
                         {
-                            if (i + 1 < args.Length)
-                            {
-                                settings.Driver = args[++i];
-                            }
+                            if (i + 1 < args.Length)                            
+                                settings.Driver = args[++i];                            
 
-                            else
-                            {
-                                Console.WriteLine("No driver specified with -d option.");
-                            }
+                            else                            
+                                Console.WriteLine("No driver specified with -d option.");                            
                         }
                         break;
                 }
@@ -231,6 +227,11 @@ namespace turbo_smoke
                 Console.ReadKey();
                 Environment.Exit(1);
             }
+
+            string output_dir = settings.OutputDir;
+            if (Directory.Exists(output_dir))
+                Directory.Delete(output_dir, true);
+            Directory.CreateDirectory(output_dir);
 
             Dictionary<string, int> baselines = null;
 
@@ -282,61 +283,32 @@ namespace turbo_smoke
                     throw new Exception();
             }
 
-            var tests = tests_string.Split(new string[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries).Take(100).ToList();
+            var tests = tests_string.Split(new string[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);//.Skip(100).Take(100).ToList();
             //tests.Add("10736_gpu_resident_timed");
-        
-            string output_dir = settings.OutputDir;
-            if (Directory.Exists(output_dir))
-                Directory.Delete(output_dir, true);
-            Directory.CreateDirectory(output_dir);
-
-            List<string> failed_tests = new List<string>();
-            object sync = new object();
 
             NativeMethods.SetErrorMode(NativeMethods.SetErrorMode(0) | ErrorModes.SEM_NOGPFAULTERRORBOX | ErrorModes.SEM_FAILCRITICALERRORS | ErrorModes.SEM_NOOPENFILEERRORBOX);
-
-#if false
-            Action<string> one_test = (string test) =>
-            {
-                string test_dir = Path.Combine(output_dir, test);
-                Directory.CreateDirectory(test_dir);
-
-                string output;
-                string error;
-                if (RunCommandLineProcess(smoke_path, string.Format("-d {0} -k -D {1} -n -t {2}", driver, test_dir, test), out output, out error))
-                {
-
-                }
-
-                else
-                {
-                    lock (sync)
-                    {
-                        failed_tests.Add(test);
-                    }
-                }
-            };
+            
+            List<string> failed_tests = new List<string>();
 
             {
-                var start = timer.Elapsed;
+                int in_flight_tests = 3 * Environment.ProcessorCount / 2;
 
-                Parallel.ForEach(tests, one_test);
-                //tests.ForEach(one_test);
+                if (Environment.ProcessorCount <= 4 || string.Compare(settings.Driver, "opengl2", StringComparison.InvariantCultureIgnoreCase) == 0)
+                    in_flight_tests = 4;
+                
+                const bool record_test_times = false;
+                Dictionary<string, TimeSpan> test_times = null;
+                if (record_test_times)
+                    test_times = new Dictionary<string, TimeSpan>();
 
-                var finish = timer.Elapsed;
-                Console.WriteLine("Test run time = " + (finish - start).TotalSeconds);                                
-            }
-#else
-            {
-                int in_flight_tests = Environment.ProcessorCount * 3 / 2;
-
+                object sync = new object();
                 Semaphore s = new Semaphore(in_flight_tests, in_flight_tests);
                 List<Process> processes = new List<Process>();
                 ManualResetEvent finished = new ManualResetEvent(false);
 
                 Action<object> monitorThread = (object o) =>
                     {
-                        var timeout = TimeSpan.FromSeconds(15.0);
+                        var timeout = TimeSpan.FromSeconds(15);
 
                         while (!finished.WaitOne(1000))
                         {
@@ -351,8 +323,19 @@ namespace turbo_smoke
 
                                     if (now - process.StartTime > timeout)
                                     {
-                                        if (!process.HasExited)
+                                        //if (!process.HasExited)
+                                        try
+                                        {
+                                            string a = process.StartInfo.Arguments;
+                                            string test_name = a.Substring(a.IndexOf("-t") + 3);
+                                            Console.WriteLine("Killing: " + test_name);
                                             process.Kill();
+                                        }
+
+                                        catch (Exception e)
+                                        {
+                                            Console.WriteLine("Couldn't fill process: '{0}'.", e.Message);
+                                        }
                                     }
                                 }
                             }
@@ -362,35 +345,33 @@ namespace turbo_smoke
                 EventHandler exited = (object sender, EventArgs e) =>
                 {
                     var process = (Process)sender;
+                    string a = process.StartInfo.Arguments;
+                    string test_name = a.Substring(a.IndexOf("-t") + 3);
 
                     lock (sync)
                     {
                         processes.Remove(process);
-                    }
 
-                    string a = process.StartInfo.Arguments;
-                    string test_name = a.Substring(a.IndexOf("-t") + 3);
-
-                    if (process.ExitCode == 0)
-                    {
-                        //Console.WriteLine("Passed: " + test_name);
-                    }
-
-                    else
-                    {
-                        if ((uint)process.ExitCode == 0xFFFFFFFF)
+                        if (process.ExitCode == 0)
                         {
-                            Console.WriteLine("Killed: " + test_name);
-                        }                        
+       
+                        }
 
                         else
                         {
-                            Console.WriteLine("Crashed: " + test_name);
+                            failed_tests.Add(test_name);
+
+                            if ((uint)process.ExitCode == 0xFFFFFFFF)
+                                Console.WriteLine("Killed: " + test_name);
+
+                            else
+                                Console.WriteLine("Crashed: " + test_name);
                         }
 
-                        lock (sync)
+                        if (record_test_times)
                         {
-                            failed_tests.Add(test_name);
+                            TimeSpan time = DateTime.Now - process.StartTime;
+                            test_times.Add(test_name, time);
                         }
                     }
 
@@ -424,8 +405,20 @@ namespace turbo_smoke
 
                 var finish = timer.Elapsed;
                 Console.WriteLine("Test run time = {0:F2} sec.", (finish - start).TotalSeconds);
+
+                if (record_test_times)
+                {
+                    const string times_filename = "c:/users/evan/desktop/smoke_data/test_times.txt";
+                    using (StreamWriter writer = new StreamWriter(new FileStream(times_filename, FileMode.Create)))
+                    {
+                        foreach (var test in test_times.OrderByDescending(a => a.Value))
+                        {
+                            writer.WriteLine("{0} {1}", test.Key, test.Value.TotalSeconds);
+                        }
+                    }
+                }
             }
-#endif
+
             {
                 var start = timer.Elapsed;
                 string captures_dir = null;
