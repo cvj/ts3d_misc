@@ -333,7 +333,7 @@ namespace turbo_smoke
                 if (Environment.ProcessorCount <= 4 || settings.Driver.Contains("opengl"))
                     in_flight_tests = 4;
                 
-                const bool record_test_times = true;
+                bool record_test_times = false;
                 Dictionary<string, TimeSpan> test_times = null;
                 if (record_test_times)
                     test_times = new Dictionary<string, TimeSpan>();
@@ -360,18 +360,19 @@ namespace turbo_smoke
 
                                     if (now - process.StartTime > timeout)
                                     {
+                                        string a = process.StartInfo.Arguments;
+                                        string test_name = a.Substring(a.IndexOf("-t") + 3);
+
                                         //if (!process.HasExited)
                                         try
-                                        {
-                                            string a = process.StartInfo.Arguments;
-                                            string test_name = a.Substring(a.IndexOf("-t") + 3);
+                                        {                                            
                                             Console.WriteLine("Killing: " + test_name);
                                             process.Kill();
                                         }
 
                                         catch (Exception e)
                                         {
-                                            Console.WriteLine("Couldn't fill process: '{0}'.", e.Message);
+                                            Console.WriteLine("Couldn't kill {0}: '{1}'.", test_name, e.Message);
                                         }
                                     }
                                 }
