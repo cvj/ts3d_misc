@@ -45,6 +45,7 @@ namespace turbo_smoke
             //ps.RedirectStandardError = true;
             //ps.RedirectStandardOutput = true;
             ps.WindowStyle = ProcessWindowStyle.Hidden;
+            ps.EnvironmentVariables.Add("HOOPS_DRIVER_OPTIONS", "debug=0x00040000");
 
             Process process = new Process();
             process.StartInfo = ps;
