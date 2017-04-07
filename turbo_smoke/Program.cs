@@ -128,11 +128,11 @@ namespace turbo_smoke
                             {
                                 settings.OutputDir = args[++i];
 
-                                if (Directory.Exists(settings.OutputDir))
-                                {
-                                    Console.WriteLine("Output directory '{0}' exists, use -O instead to overwrite existing directory.", settings.OutputDir);
-                                    return false;
-                                }
+                                //if (Directory.Exists(settings.OutputDir))
+                                //{
+                                  //  Console.WriteLine("Output directory '{0}' exists, use -O instead to overwrite existing directory.", settings.OutputDir);
+                                    //return false;
+                                //}
                             }
 
                             else
@@ -215,7 +215,7 @@ namespace turbo_smoke
             {
                 Console.WriteLine("No output directory specified.");
                 return false;
-            }
+            }            
 
             if (settings.SmokeExecutable == null)
             {
@@ -228,6 +228,12 @@ namespace turbo_smoke
                 Console.WriteLine("No driver specified.");
                 return false;
             }
+
+            if (settings.OutputDir != null)
+                settings.OutputDir = Path.Combine(settings.OutputDir, settings.Driver);
+
+            if (settings.BaselineDir != null)
+                settings.BaselineDir = Path.Combine(settings.BaselineDir, settings.Driver);
 
             return true;
         }
@@ -329,7 +335,7 @@ namespace turbo_smoke
             List<string> failed_tests = new List<string>();
 
             {
-                int in_flight_tests = 3 * Environment.ProcessorCount / 2;
+                int in_flight_tests = Environment.ProcessorCount;
 
                 if (Environment.ProcessorCount <= 4 || settings.Driver.Contains("opengl"))
                     in_flight_tests = 4;
