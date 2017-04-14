@@ -7,6 +7,8 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Runtime.InteropServices;
+using System.Drawing;
+using System.Drawing.Imaging;
 
 namespace turbo_smoke
 {
@@ -328,7 +330,7 @@ namespace turbo_smoke
                 }
 
                 tests = tests.Except(exclude);
-            }
+            }            
 
             NativeMethods.SetErrorMode(NativeMethods.SetErrorMode(0) | ErrorModes.SEM_NOGPFAULTERRORBOX | ErrorModes.SEM_FAILCRITICALERRORS | ErrorModes.SEM_NOOPENFILEERRORBOX);
                         
@@ -570,16 +572,55 @@ namespace turbo_smoke
                                         {
                                             if (baseline_crc != crc)
                                             {
-                                                changed_tests.Add(test);
-                                                writer.Write(result);
+                                                string baseline_image = Directory.GetFiles(settings.BaselineDir, "*" + test + ".png")[0];
+                                                string new_image = null;
+                                                {
+                                                    var images = Directory.GetFiles(test_dir, "*.png");
+                                                    if (images.Length > 0)
+                                                        new_image = Path.Combine(test_dir, Path.GetFileName(images[0]));
+                                                }
+                                                
+                                                if (new_image != null)
+                                                {
+                                                    int diff_count = 0;
+                                                    using (var before = (Bitmap)Bitmap.FromFile(baseline_image))
+                                                    {
+                                                        using (var after = (Bitmap)Bitmap.FromFile(new_image))
+                                                        {
+                                                            var beforeData = before.LockBits(new Rectangle(0, 0, before.Width, before.Height), ImageLockMode.ReadOnly, PixelFormat.Format32bppRgb);
+                                                            var afterData = after.LockBits(new Rectangle(0, 0, after.Width, after.Height), ImageLockMode.ReadOnly, PixelFormat.Format32bppRgb);
 
-                                                var images = Directory.GetFiles(test_dir, "*.png");
-                                                if (images.Length > 0)
-                                                    File.Copy(images[0], Path.Combine(captures_dir, Path.GetFileName(images[0])));
+                                                            for (int y = 0, height = beforeData.Height; y < height; ++y)
+                                                            {
+                                                                for (int x = 0, width = beforeData.Width; x < width; ++x)
+                                                                {
+                                                                    unsafe 
+                                                                    {
+                                                                        var p1 = (int*)(beforeData.Scan0 + y * beforeData.Stride + x * 4);
+                                                                        var p2 = (int*)(afterData.Scan0 + y * afterData.Stride + x * 4);
 
-                                                var match = "*" + test + ".png";
-                                                var baseline_image = Directory.GetFiles(settings.BaselineDir, match)[0];
-                                                File.Copy(baseline_image, Path.Combine(captures_dir, Path.GetFileName(baseline_image)));
+                                                                        if (*p1 != *p2)
+                                                                            ++diff_count;                                                               
+                                                                    }
+                                                                }
+                                                            }
+
+                                                            after.UnlockBits(afterData);
+                                                            before.UnlockBits(beforeData);
+                                                        }
+                                                    }
+
+                                                    const int dust_threshold = 1500;
+
+                                                    if (diff_count > dust_threshold)
+                                                    {
+                                                        changed_tests.Add(test);
+                                                        writer.Write(result);
+
+                                                        File.Copy(new_image, Path.Combine(captures_dir, Path.GetFileName(new_image)));
+                                                        File.Copy(baseline_image, Path.Combine(captures_dir, Path.GetFileName(baseline_image)));
+                                                    }
+                                                }
                                             }
                                         }
 
@@ -618,7 +659,7 @@ namespace turbo_smoke
                 {
                     string output;
                     string error;
-                    RunCommandLineProcess(settings.SmokeExecutable, string.Format("-d {0} -c -x * -D {1} -n", settings.Driver, captures_dir), out output, out error);
+                    RunCommandLineProcess(settings.SmokeExecutable, string.Format("-d {0} -c -M 50 -x * -D {1} -n", settings.Driver, captures_dir), out output, out error);
                 }
 
                 Console.WriteLine("Press any key to exit.");
