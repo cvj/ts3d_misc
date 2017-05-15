@@ -98,6 +98,8 @@ namespace turbo_smoke
         static bool ProcessArgs(string[] args, out Settings settings)
         {
             settings = new Settings();
+
+            bool force_out_dir = false;
             
             for (int i = 0; i < args.Length; ++i)
             {
@@ -158,6 +160,7 @@ namespace turbo_smoke
                             if (i + 1 < args.Length)
                             {
                                 settings.OutputDir = args[++i];
+                                force_out_dir = true;
                             }
 
                             else
@@ -240,7 +243,15 @@ namespace turbo_smoke
             }
 
             if (settings.OutputDir != null)
+            {
                 settings.OutputDir = Path.Combine(settings.OutputDir, settings.Driver);
+
+                if (!force_out_dir && Directory.Exists(settings.OutputDir))
+                {
+                    Console.WriteLine("Output directory '{0}' exists, use -O instead to overwrite existing directory.", settings.OutputDir);
+                    return false;
+                }
+            }
 
             if (settings.BaselineDir != null)
                 settings.BaselineDir = Path.Combine(settings.BaselineDir, settings.Driver);
