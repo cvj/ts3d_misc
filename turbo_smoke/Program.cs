@@ -74,13 +74,14 @@ namespace turbo_smoke
             internal static extern ErrorModes SetErrorMode(ErrorModes mode);
         }
 
-        struct Settings
+        class Settings
         {
             public string SmokeExecutable;
             public string OutputDir;
             public string BaselineDir;
             public string Driver;
             public string ExcludeList;
+            public int InFlightTests = Environment.ProcessorCount;
         }
 
         static void ShowHelp()
@@ -92,6 +93,7 @@ namespace turbo_smoke
             Console.WriteLine("-O output directory path to be overwritten.");
             Console.WriteLine("-d driver type.");
             Console.WriteLine("-X path to file containing tests to exclude.");
+            Console.WriteLine("-i max number of in flight tests.");
         }
         static bool ProcessArgs(string[] args, out Settings settings)
         {
@@ -103,6 +105,12 @@ namespace turbo_smoke
 
                 switch (arg)
                 {
+                    case "-i":
+                        {
+                            settings.InFlightTests = int.Parse(args[++i]);
+                        }
+                        break;
+
                     case "-e":
                         {
                             if (i + 1 < args.Length)
@@ -337,10 +345,10 @@ namespace turbo_smoke
             List<string> failed_tests = new List<string>();
 
             {
-                int in_flight_tests = Environment.ProcessorCount;
+                int in_flight_tests = settings.InFlightTests;
 
                 if (Environment.ProcessorCount <= 4 || settings.Driver.Contains("opengl"))
-                    in_flight_tests = 4;
+                    in_flight_tests = Math.Min(settings.InFlightTests, 4);
                 
                 bool record_test_times = false;
                 Dictionary<string, TimeSpan> test_times = null;
