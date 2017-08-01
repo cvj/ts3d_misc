@@ -333,7 +333,10 @@ namespace turbo_smoke
                     throw new Exception();
             }
 
-            var tests = tests_string.Split(new string[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries).AsEnumerable();
+
+            var test_names = tests_string.Split(new string[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);            
+            int total_test_count = test_names.Length;
+            var tests = test_names.AsEnumerable();
 
             if (settings.ExcludeList != null)
             {
@@ -370,44 +373,53 @@ namespace turbo_smoke
                 Semaphore s = new Semaphore(in_flight_tests, in_flight_tests);
                 List<Process> processes = new List<Process>();
                 ManualResetEvent finished = new ManualResetEvent(false);
+                
+                int completed_tests = 0;
+                int last_progress = 0;
 
                 Action<object> monitorThread = (object o) =>
+                {
+                    var timeout = TimeSpan.FromSeconds(100);
+
+                    while (!finished.WaitOne(2000))
                     {
-                        var timeout = TimeSpan.FromSeconds(100);
+                        var now = DateTime.Now;
 
-                        while (!finished.WaitOne(1000))
+                        lock (sync)
                         {
-                            var now = DateTime.Now;
-
-                            lock (sync)
+                            // Kill below will synchronously call exit handler and modify collection
+                            for (int i = processes.Count - 1; i >= 0; --i)
                             {
-                                // Kill below will synchronously call exit handler and modify collection
-                                for (int i = processes.Count - 1; i >= 0; --i)
+                                var process = processes[i];
+
+                                if (now - process.StartTime > timeout)
                                 {
-                                    var process = processes[i];
+                                    string a = process.StartInfo.Arguments;
+                                    string test_name = a.Substring(a.IndexOf("-t") + 3);
 
-                                    if (now - process.StartTime > timeout)
+                                    //if (!process.HasExited)
+                                    try
                                     {
-                                        string a = process.StartInfo.Arguments;
-                                        string test_name = a.Substring(a.IndexOf("-t") + 3);
+                                        Console.WriteLine("Killing: " + test_name);
+                                        process.Kill();
+                                    }
 
-                                        //if (!process.HasExited)
-                                        try
-                                        {                                            
-                                            Console.WriteLine("Killing: " + test_name);
-                                            process.Kill();
-                                        }
-
-                                        catch (Exception e)
-                                        {
-                                            Console.WriteLine("Couldn't kill {0}: '{1}'.", test_name, e.Message);
-                                        }
+                                    catch (Exception e)
+                                    {
+                                        Console.WriteLine("Couldn't kill {0}: '{1}'.", test_name, e.Message);
                                     }
                                 }
                             }
                         }
-                    };
-
+                        
+                        if (completed_tests != last_progress)
+                        {
+                            Console.WriteLine("Progress: {0}/{1}", completed_tests, total_test_count);
+                            last_progress = completed_tests;
+                        }
+                    }
+                };
+                
                 EventHandler exited = (object sender, EventArgs e) =>
                 {
                     var process = (Process)sender;
@@ -416,11 +428,12 @@ namespace turbo_smoke
 
                     lock (sync)
                     {
+                        ++completed_tests;
+
                         processes.Remove(process);
 
                         if (process.ExitCode == 0)
                         {
-       
                         }
 
                         else
@@ -629,7 +642,7 @@ namespace turbo_smoke
                                                         }
                                                     }
 
-                                                    const int dust_threshold = 1500;
+                                                    const int dust_threshold = 100;
 
                                                     if (diff_count > dust_threshold)
                                                     {
