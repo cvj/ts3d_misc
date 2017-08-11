@@ -1,9 +1,11 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 14
-VisualStudioVersion = 14.0.23107.0
+VisualStudioVersion = 14.0.25420.1
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "turbo_smoke", "turbo_smoke.csproj", "{F52F5970-EFA7-41B9-9141-389347C63AF2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "image_diff", "..\image_diff\image_diff.csproj", "{489E42D5-C104-4E2E-A2E3-04C0F74589FB}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -15,6 +17,10 @@ Global
 		{F52F5970-EFA7-41B9-9141-389347C63AF2}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F52F5970-EFA7-41B9-9141-389347C63AF2}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F52F5970-EFA7-41B9-9141-389347C63AF2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{489E42D5-C104-4E2E-A2E3-04C0F74589FB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{489E42D5-C104-4E2E-A2E3-04C0F74589FB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{489E42D5-C104-4E2E-A2E3-04C0F74589FB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{489E42D5-C104-4E2E-A2E3-04C0F74589FB}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
