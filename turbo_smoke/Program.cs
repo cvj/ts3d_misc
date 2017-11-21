@@ -629,7 +629,7 @@ namespace turbo_smoke
                                                         }
                                                     }
 
-                                                    const int dust_threshold = 1500;
+                                                    const int dust_threshold = 150;
 
                                                     if (diff_count > dust_threshold)
                                                     {
